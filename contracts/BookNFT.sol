@@ -28,7 +28,7 @@ contract BookNFT is ERC1155, Ownable, ERC2981 {
     // This is just for OpenSea to find your metadata containing the royalties.
     // This metadata is about the contract and not the individual NFTs
     function contractURI() public pure returns (string memory) {
-        return "https://metadata-url.com/my-metadata";
+        return "";
     }
 
     function uri(uint256 id) public view override returns (string memory) {}
@@ -48,6 +48,8 @@ contract BookNFT is ERC1155, Ownable, ERC2981 {
     ) public {
         require(msg.sender == from);
         _burn(from, id, amount);
+        // _resetTokenRoyalty(id);
+
     }
 
     // Value is in basis points so 10000 = 100% , 100 = 1% etc
