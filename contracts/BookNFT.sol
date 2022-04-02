@@ -7,8 +7,6 @@ import "@openzeppelin/contracts/token/common/ERC2981.sol";
 
 contract BookNFT is ERC1155, Ownable, ERC2981 {
 
-    uint256 public constant ARTWORK = 0;
-    uint256 public constant PHOTO = 1;
     RoyaltyInfo private _royalties;
 
     constructor(address _recipient, uint96 _royaltyAmount) ERC1155("") {
