@@ -10,8 +10,8 @@ contract PostNFT is Ownable, ERC721Royalty {
     }
 
     // Value is in basis points so 10000 = 100% , 100 = 1% etc
-    function setRoyalty(address _recipient, uint96 value) public {
-        _setDefaultRoyalty(_recipient, value);
+    function setRoyalty(address _recipient, uint96 _value) public {
+        _setDefaultRoyalty(_recipient, _value);
     }
 
 }
