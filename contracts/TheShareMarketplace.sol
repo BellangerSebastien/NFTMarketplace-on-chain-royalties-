@@ -4,21 +4,18 @@ pragma solidity ^0.8.3;
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
 
 import "./BookNFT.sol";
 import "./PostNFT.sol";
 
-contract NFTMarket is ReentrancyGuard {
+contract NFTMarket is Context, ReentrancyGuard {
     using Counters for Counters.Counter;
     Counters.Counter private _itemIds;
     Counters.Counter private _itemsSold;
-
+    
     address payable owner;
     uint256 listingPrice = 0.025 ether;
-
-    constructor() {
-        owner = payable(msg.sender);
-    }
 
     struct MarketItem {
         uint256 itemId;
@@ -42,6 +39,10 @@ contract NFTMarket is ReentrancyGuard {
         bool sold
     );
 
+    constructor() {
+        owner = payable(_msgSender());
+    }
+
     /* Returns the listing price of the contract */
     function getListingPrice() public view returns (uint256) {
         return listingPrice;
@@ -53,6 +54,7 @@ contract NFTMarket is ReentrancyGuard {
         uint256 tokenId,
         uint256 price
     ) public payable nonReentrant {
+        require(IERC721(nftContract).ownerOf(tokenId) == _msgSender(), "Not token owner");
         require(price > 0, "Price must be at least 1 wei");
         require(
             msg.value == listingPrice,
@@ -66,42 +68,63 @@ contract NFTMarket is ReentrancyGuard {
             itemId,
             nftContract,
             tokenId,
-            payable(msg.sender),
+            payable(_msgSender()),
             payable(address(0)),
             price,
             false
         );
 
-        IERC721(nftContract).transferFrom(msg.sender, address(this), tokenId);
+        IERC721(nftContract).approve(address(this), tokenId);
 
         emit MarketItemCreated(
             itemId,
             nftContract,
             tokenId,
-            msg.sender,
+            _msgSender(),
             address(0),
             price,
             false
         );
     }
 
-    /* Creates the sale of a marketplace item */
-    /* Transfers ownership of the item, as well as funds between parties */
-    function createMarketSale(address nftContract, uint256 itemId)
-        public
-        payable
-        nonReentrant
+    function _deduceRoyalties(uint256 itemId)
+        internal
+        returns (uint256)
     {
+        address nftContract = idToMarketItem[itemId].nftContract;
         uint256 price = idToMarketItem[itemId].price;
         uint256 tokenId = idToMarketItem[itemId].tokenId;
+        require(_checkRoyalties(nftContract),"Royalties are not available");
+        // Get amount of royalties to pays and recipient
+        (address royaltiesReceiver, uint256 royaltiesAmount) = IERC2981(nftContract)
+            .royaltyInfo(tokenId, price);
+        if (royaltiesAmount > 0) {
+            payable(royaltiesReceiver).transfer(royaltiesAmount);
+        }
+        // Broadcast royalties payment
+        // emit RoyaltiesPaid(tokenId, royaltiesAmount);
+        return royaltiesAmount;
+    }
+
+    /* Creates the sale of a marketplace item */
+    /* Transfers ownership of the item, as well as funds between parties */
+    function createMarketSale(uint256 itemId) public payable nonReentrant {
+        address nftContract = idToMarketItem[itemId].nftContract;
+        uint256 price = idToMarketItem[itemId].price;
+        uint256 tokenId = idToMarketItem[itemId].tokenId;
+        require(IERC721(nftContract).getApproved(tokenId) == address(this),"Token not approved");
         require(
-            msg.value == price,
+            IERC721(nftContract).ownerOf(tokenId) != _msgSender(),
+            "Token owner not allowed"
+        );
+        require(
+            msg.value >= price,
             "Please submit the asking price in order to complete the purchase"
         );
-
-        idToMarketItem[itemId].seller.transfer(msg.value);
-        IERC721(nftContract).transferFrom(address(this), msg.sender, tokenId);
-        idToMarketItem[itemId].owner = payable(msg.sender);
+        uint royaltiesAmount = _deduceRoyalties(itemId);
+        idToMarketItem[itemId].seller.transfer(msg.value - royaltiesAmount);
+        IERC721(nftContract).transferFrom(idToMarketItem[itemId].seller, _msgSender(), tokenId);
+        idToMarketItem[itemId].owner = payable(_msgSender());
         idToMarketItem[itemId].sold = true;
         _itemsSold.increment();
         payable(owner).transfer(listingPrice);
@@ -132,14 +155,14 @@ contract NFTMarket is ReentrancyGuard {
         uint256 currentIndex = 0;
 
         for (uint256 i = 0; i < totalItemCount; i++) {
-            if (idToMarketItem[i + 1].owner == msg.sender) {
+            if (idToMarketItem[i + 1].owner == _msgSender()) {
                 itemCount += 1;
             }
         }
 
         MarketItem[] memory items = new MarketItem[](itemCount);
         for (uint256 i = 0; i < totalItemCount; i++) {
-            if (idToMarketItem[i + 1].owner == msg.sender) {
+            if (idToMarketItem[i + 1].owner == _msgSender()) {
                 uint256 currentId = i + 1;
                 MarketItem storage currentItem = idToMarketItem[currentId];
                 items[currentIndex] = currentItem;
@@ -156,14 +179,14 @@ contract NFTMarket is ReentrancyGuard {
         uint256 currentIndex = 0;
 
         for (uint256 i = 0; i < totalItemCount; i++) {
-            if (idToMarketItem[i + 1].seller == msg.sender) {
+            if (idToMarketItem[i + 1].seller == _msgSender()) {
                 itemCount += 1;
             }
         }
 
         MarketItem[] memory items = new MarketItem[](itemCount);
         for (uint256 i = 0; i < totalItemCount; i++) {
-            if (idToMarketItem[i + 1].seller == msg.sender) {
+            if (idToMarketItem[i + 1].seller == _msgSender()) {
                 uint256 currentId = i + 1;
                 MarketItem storage currentItem = idToMarketItem[currentId];
                 items[currentIndex] = currentItem;
@@ -171,5 +194,17 @@ contract NFTMarket is ReentrancyGuard {
             }
         }
         return items;
+    }
+
+    /**
+     * @dev Checks if NFT contract implements the ERC-2981 interface
+     * @param _contract - the address of the NFT contract to query
+     * @return true if ERC-2981 interface is supported, false otherwise
+     */
+    function _checkRoyalties(address _contract) internal view returns (bool) {
+        bool success = IERC2981(_contract).supportsInterface(
+            type(IERC2981).interfaceId
+        );
+        return success;
     }
 }

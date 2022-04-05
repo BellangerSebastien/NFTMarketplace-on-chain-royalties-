@@ -73,7 +73,6 @@ contract PostNFT is Ownable, ERC721Royalty {
 
     function mint(address to, string memory tokenDetails)
         public
-        payable
         virtual
         returns (bool)
     {
