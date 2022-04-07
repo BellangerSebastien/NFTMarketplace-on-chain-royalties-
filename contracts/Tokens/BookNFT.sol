@@ -134,8 +134,6 @@ contract BookNFT is ERC1155, Ownable, ERC2981 {
         return _id;
     }
 
-    
-
     // This is just for OpenSea to find your metadata containing the royalties.
     // This metadata is about the contract and not the individual NFTs
     function contractURI() public pure returns (string memory) {
@@ -190,14 +188,15 @@ contract BookNFT is ERC1155, Ownable, ERC2981 {
      * @param _ids  Array of Token IDs to change creator
      */
     function setCreator(address _to, uint256[] memory _ids) public {
-        require(
-            _to != address(0),
-            "ERC1155#setCreator: INVALID_ADDRESS."
-        );
+        require(_to != address(0), "ERC1155#setCreator: INVALID_ADDRESS.");
         for (uint256 i = 0; i < _ids.length; i++) {
             uint256 id = _ids[i];
             _setCreator(_to, id);
         }
+    }
+
+    function creatorOf(uint256 _id) public view returns (address) {
+        return creators[_id];
     }
 
     function burn(

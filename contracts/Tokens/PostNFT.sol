@@ -5,6 +5,8 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Royalty.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 
+import "hardhat/console.sol";
+
 contract PostNFT is Ownable, ERC721Royalty {
     using Counters for Counters.Counter;
 
@@ -74,11 +76,13 @@ contract PostNFT is Ownable, ERC721Royalty {
     function mint(address to, string memory tokenDetails)
         public
         virtual
+        onlyOwner
         returns (bool)
     {
         _tokenIds.increment();
         uint256 tokenID = _tokenIds.current();
         posts[tokenID] = PostStruct(tokenDetails, "");
+        // console.log("Token ID in smart contract: ",tokenID);
         _safeMint(to, tokenID);
         return true;
     }
