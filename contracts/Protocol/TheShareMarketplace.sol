@@ -10,15 +10,24 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interfaces/iBookNFT.sol";
 import "../interfaces/iPostNFT.sol";
 
+import "hardhat/console.sol";
+
+
 contract TheShareMarketplace is Context, ReentrancyGuard {
     using Counters for Counters.Counter;
     Counters.Counter private _postItemIds;
     Counters.Counter private _bookItemIds;
     Counters.Counter private _itemsSold;
 
+    enum State {
+        Active,
+        Release,
+        Inactive
+    }
+
     address payable owner;
     uint256 public listingPrice = 0.025 ether;
-    uint256 public floorPrice = 0.025 ether;
+    uint256 public floorPrice = 0.01 ether;
 
     struct MarketPostItem {
         uint256 itemId;
@@ -27,7 +36,7 @@ contract TheShareMarketplace is Context, ReentrancyGuard {
         address payable seller;
         address payable owner;
         uint256 price;
-        bool sold;
+        State state;
     }
 
     struct MarketBookItem {
@@ -50,7 +59,7 @@ contract TheShareMarketplace is Context, ReentrancyGuard {
         address seller,
         address owner,
         uint256 price,
-        bool sold
+        State state
     );
 
     // event MarketBookItemCreated(
@@ -63,7 +72,10 @@ contract TheShareMarketplace is Context, ReentrancyGuard {
     // );
 
     modifier isPostForSale(uint256 itemId) {
-        require(!idToMarketPostItem[itemId].sold, "Item is already sold");
+        require(
+            idToMarketPostItem[itemId].state == State.Active,
+            "Item is not active to be sold"
+        );
         _;
     }
 
@@ -107,11 +119,13 @@ contract TheShareMarketplace is Context, ReentrancyGuard {
             payable(_msgSender()),
             payable(address(0)),
             price,
-            false
+            State.Active
         );
 
-        // IPostNFT(nftContract).approve(address(this), tokenId);
-        require(IPostNFT(nftContract).isApprovedForAll(_msgSender(), address(this)),"Marketplace: Token isn't approved.");
+        require(
+            IPostNFT(nftContract).isApprovedForAll(_msgSender(), address(this)),
+            "Marketplace: Token is not approved."
+        );
 
         emit MarketPostItemCreated(
             itemId,
@@ -120,11 +134,37 @@ contract TheShareMarketplace is Context, ReentrancyGuard {
             _msgSender(),
             address(0),
             price,
-            false
+            State.Active
         );
     }
 
-    /* Places an item for sale on the marketplace */
+    function deleteMarketPostItem(uint256 itemId) public nonReentrant {
+        require(
+            itemId <= _postItemIds.current(),
+            "Marketplace: Invaild item ID"
+        );
+        require(
+            idToMarketPostItem[itemId].state == State.Active,
+            "Marketplace: Item must be on market"
+        );
+        MarketPostItem storage item = idToMarketPostItem[itemId];
+
+        require(
+            IPostNFT(item.nftContract).ownerOf(item.tokenId) == _msgSender(),
+            "Marketplace: Must be token owner"
+        );
+        require(
+            IPostNFT(item.nftContract).isApprovedForAll(
+                _msgSender(),
+                address(this)
+            ),
+            "Marketplace: Token is not approved."
+        );
+
+        item.state = State.Inactive;
+    }
+
+    /* Places a book item for sale on the marketplace */
     // function createMarketBookItem(
     //     address nftContract,
     //     uint256 tokenId,
@@ -163,7 +203,6 @@ contract TheShareMarketplace is Context, ReentrancyGuard {
     //         amount
     //     );
 
-        
     // }
 
     /* Creates the sale of a marketplace item */
@@ -177,12 +216,15 @@ contract TheShareMarketplace is Context, ReentrancyGuard {
         address nftContract = idToMarketPostItem[itemId].nftContract;
         uint256 price = idToMarketPostItem[itemId].price;
         uint256 tokenId = idToMarketPostItem[itemId].tokenId;
+        address seller = idToMarketPostItem[itemId].seller;
+        console.log("Token ID:", tokenId);
+        console.log("Seller:", seller);
         require(
-            IERC721(nftContract).getApproved(tokenId) == address(this),
-            "Token not approved"
+            IPostNFT(nftContract).isApprovedForAll(seller, address(this)) && seller == IPostNFT(nftContract).ownerOf(tokenId),
+            "Token not approved nor owned"
         );
         require(
-            IERC721(nftContract).ownerOf(tokenId) != _msgSender(),
+            IPostNFT(nftContract).ownerOf(tokenId) != _msgSender(),
             "Token owner not allowed"
         );
         require(
@@ -204,7 +246,7 @@ contract TheShareMarketplace is Context, ReentrancyGuard {
             tokenId
         );
         idToMarketPostItem[itemId].owner = payable(_msgSender());
-        idToMarketPostItem[itemId].sold = true;
+        idToMarketPostItem[itemId].state = State.Release;
         _itemsSold.increment();
         payable(owner).transfer(listingPrice);
     }
@@ -224,7 +266,7 @@ contract TheShareMarketplace is Context, ReentrancyGuard {
     //     );
     // }
 
-    /* Returns all unsold market items */
+    /* Returns all unsold market post items */
     function fetchMarketPostItems()
         public
         view
@@ -248,8 +290,8 @@ contract TheShareMarketplace is Context, ReentrancyGuard {
         return items;
     }
 
-    /* Returns only items that a user has purchased */
-    function fetchMyNFTs() public view returns (MarketPostItem[] memory) {
+    /* Returns only post items that a user has purchased */
+    function fetchMyPosts() public view returns (MarketPostItem[] memory) {
         uint256 totalItemCount = _postItemIds.current();
         uint256 itemCount = 0;
         uint256 currentIndex = 0;
@@ -274,8 +316,12 @@ contract TheShareMarketplace is Context, ReentrancyGuard {
         return items;
     }
 
-    /* Returns only items a user has created */
-    function fetchItemsCreated() public view returns (MarketPostItem[] memory) {
+    /* Returns only post items a user has created */
+    function fetchPostItemsCreated()
+        public
+        view
+        returns (MarketPostItem[] memory)
+    {
         uint256 totalItemCount = _postItemIds.current();
         uint256 itemCount = 0;
         uint256 currentIndex = 0;

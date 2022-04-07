@@ -82,7 +82,7 @@ contract PostNFT is Ownable, ERC721Royalty {
         _tokenIds.increment();
         uint256 tokenID = _tokenIds.current();
         posts[tokenID] = PostStruct(tokenDetails, "");
-        console.log("Token ID in smart contract: ",tokenID);
+        // console.log("Token ID in smart contract: ",tokenID);
         _safeMint(to, tokenID);
         return true;
     }
