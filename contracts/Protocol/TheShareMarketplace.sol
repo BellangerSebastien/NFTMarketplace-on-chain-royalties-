@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 pragma solidity ^0.8.3;
 
-import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/interfaces/IERC2981.sol";
+import "@openzeppelin/contracts/interfaces/IERC20.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
@@ -12,339 +12,274 @@ import "../interfaces/iPostNFT.sol";
 
 import "hardhat/console.sol";
 
-
-contract TheShareMarketplace is Context, ReentrancyGuard {
-    using Counters for Counters.Counter;
-    Counters.Counter private _postItemIds;
-    Counters.Counter private _bookItemIds;
-    Counters.Counter private _itemsSold;
-
+contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
     enum State {
         Active,
         Release,
         Inactive
     }
 
-    address payable owner;
-    uint256 public listingPrice = 0.025 ether;
-    uint256 public floorPrice = 0.01 ether;
+    uint256 public listingFee = 0.025 ether;
 
-    struct MarketPostItem {
-        uint256 itemId;
+    struct MarketItem {
+        bytes32 itemId;
+        bool isErc721;
         address nftContract;
         uint256 tokenId;
+        address erc20address;
         address payable seller;
-        address payable owner;
+        address payable buyer;
+        uint256 amount;
         uint256 price;
         State state;
     }
 
-    struct MarketBookItem {
-        uint256 itemId;
-        address nftContract;
-        uint256 tokenId;
-        address payable seller;
-        // address payable owner;
-        uint256 price;
-        uint256 amount;
-    }
+    mapping(bytes32 => MarketItem) private marketItemsListed;
+    bytes32[] private _openItems;
 
-    mapping(uint256 => MarketPostItem) private idToMarketPostItem;
-    mapping(uint256 => MarketBookItem) private idToMarketBookItem;
-
-    event MarketPostItemCreated(
-        uint256 indexed itemId,
+    event MarketItemCreated(
+        bytes32 itemId,
+        bool indexed isErc721,
         address indexed nftContract,
         uint256 indexed tokenId,
-        address seller,
-        address owner,
-        uint256 price,
-        State state
+        address erc20address,
+        uint256 amount,
+        uint256 price
     );
 
-    // event MarketBookItemCreated(
-    //     uint256 indexed itemId,
-    //     address indexed nftContract,
-    //     uint256 indexed tokenId,
-    //     address seller,
-    //     uint256 price,
-    //     uint256 amount
-    // );
+    event MarketItemSold(address indexed buyer, bytes32 itemId);
 
-    modifier isPostForSale(uint256 itemId) {
+    event MarketItemCancelled(bytes32 itemId);
+
+    modifier isForSale(bytes32 itemId) {
         require(
-            idToMarketPostItem[itemId].state == State.Active,
+            marketItemsListed[itemId].state == State.Active,
             "Item is not active to be sold"
         );
         _;
     }
 
     constructor() {
-        owner = payable(_msgSender());
-    }
-
-    /* Returns the listing price of the contract */
-    // function getListingPrice() public view returns (uint256) {
-    //     return listingPrice;
-    // }
-
-    function setFloorPrice(uint256 _floorPrice) public {
-        floorPrice = _floorPrice;
+        
     }
 
     /* Places an item for sale on the marketplace */
-    function createMarketPostItem(
+    function createMarketItem(
+        bool isErc721,
         address nftContract,
         uint256 tokenId,
-        uint256 price
+        uint256 price,
+        uint256 amount,
+        address erc20address
     ) public payable nonReentrant {
-        require(
-            IPostNFT(nftContract).ownerOf(tokenId) == _msgSender(),
-            "Not token owner"
+        bytes32 itemId = keccak256(
+            abi.encodePacked(nftContract, tokenId, price, amount, erc20address)
         );
+        if (marketItemsListed[itemId].itemId == itemId)
+            revert("Marketplace: Item already exists for the current id");
 
-        require(price > floorPrice, "Price must be at least 0.025 MATIC");
+        if (!isErc721) {
+            require(amount > 0);
+            require(
+                IBookNFT(nftContract).balanceOf(_msgSender(), tokenId) >=
+                    amount,
+                "Marketplace: Not sufficient balance for the seller"
+            );
+            require(
+                IBookNFT(nftContract).isApprovedForAll(_msgSender(), address(this)),
+                "Marketplace: Token is not approved."
+            );
+        } else {
+            require(
+                IPostNFT(nftContract).ownerOf(tokenId) == _msgSender(),
+                "Marketplace: Not token owner"
+            );
+            require(
+                IPostNFT(nftContract).isApprovedForAll(
+                    _msgSender(),
+                    address(this)
+                ),
+                "Marketplace: Token is not approved."
+            );
+        }
+
         require(
-            msg.value == listingPrice,
+            msg.value == listingFee,
             "Price must be equal to listing price"
         );
 
-        _postItemIds.increment();
-        uint256 itemId = _postItemIds.current();
-
-        idToMarketPostItem[itemId] = MarketPostItem(
+        marketItemsListed[itemId] = MarketItem(
             itemId,
+            isErc721,
             nftContract,
             tokenId,
+            erc20address,
             payable(_msgSender()),
             payable(address(0)),
+            amount,
             price,
             State.Active
         );
 
-        require(
-            IPostNFT(nftContract).isApprovedForAll(_msgSender(), address(this)),
-            "Marketplace: Token is not approved."
-        );
+        _openItems.push(itemId);
 
-        emit MarketPostItemCreated(
+        emit MarketItemCreated(
             itemId,
+            isErc721,
             nftContract,
             tokenId,
-            _msgSender(),
-            address(0),
-            price,
-            State.Active
+            erc20address,
+            amount,
+            price
         );
     }
 
-    function deleteMarketPostItem(uint256 itemId) public nonReentrant {
+    function cancelMarketPostItem(bytes32 itemId) public nonReentrant {
+        MarketItem memory item = marketItemsListed[itemId];
         require(
-            itemId <= _postItemIds.current(),
-            "Marketplace: Invaild item ID"
-        );
-        require(
-            idToMarketPostItem[itemId].state == State.Active,
+            item.state == State.Active,
             "Marketplace: Item must be on market"
         );
-        MarketPostItem storage item = idToMarketPostItem[itemId];
-
         require(
-            IPostNFT(item.nftContract).ownerOf(item.tokenId) == _msgSender(),
-            "Marketplace: Must be token owner"
-        );
-        require(
-            IPostNFT(item.nftContract).isApprovedForAll(
-                _msgSender(),
-                address(this)
-            ),
-            "Marketplace: Token is not approved."
+            item.seller == _msgSender() || _msgSender() == owner(),
+            "Marketplace: Market item can't be cancelled from other then seller or owner. Aborting."
         );
 
         item.state = State.Inactive;
+        marketItemsListed[itemId] = item;
+        _toRemoveOpenItem(itemId);
+        emit MarketItemCancelled(itemId);
     }
-
-    /* Places a book item for sale on the marketplace */
-    // function createMarketBookItem(
-    //     address nftContract,
-    //     uint256 tokenId,
-    //     uint256 price,
-    //     uint256 amount
-    // ) public payable nonReentrant {
-    //     require(
-    //         IBookNFT(nftContract).creatorOf(tokenId) == _msgSender(),
-    //         "Not token owner"
-    //     );
-
-    //     require(price > floorPrice, "Price must be at least 0.025 MATIC");
-    //     require(
-    //         msg.value == listingPrice,
-    //         "Price must be equal to listing price"
-    //     );
-
-    //     _bookItemIds.increment();
-    //     uint256 itemId = _bookItemIds.current();
-
-    //     IBookNFT(nftContract).safeTransferFrom(
-    //         _msgSender(),
-    //         address(this),
-    //         tokenId,
-    //         amount,
-    //         ""
-    //     );
-
-    //     idToMarketBookItem[itemId] = MarketBookItem(
-    //         itemId,
-    //         nftContract,
-    //         tokenId,
-    //         payable(_msgSender()),
-    //         payable(address(0)),
-    //         price,
-    //         amount
-    //     );
-
-    // }
 
     /* Creates the sale of a marketplace item */
     /* Transfers ownership of the item, as well as funds between parties */
-    function purchasePost(uint256 itemId)
+    function purchaseItem(bytes32 itemId, address erc20address)
         public
         payable
-        isPostForSale(itemId)
+        isForSale(itemId)
         nonReentrant
     {
-        address nftContract = idToMarketPostItem[itemId].nftContract;
-        uint256 price = idToMarketPostItem[itemId].price;
-        uint256 tokenId = idToMarketPostItem[itemId].tokenId;
-        address seller = idToMarketPostItem[itemId].seller;
-        console.log("Token ID:", tokenId);
-        console.log("Seller:", seller);
+        MarketItem memory item = marketItemsListed[itemId];
+        if (item.isErc721) {
+            require(
+                IPostNFT(item.nftContract).isApprovedForAll(
+                    item.seller,
+                    address(this)
+                ) &&
+                    IPostNFT(item.nftContract).ownerOf(item.tokenId) ==
+                    item.seller,
+                "Token not approved nor owned"
+            );
+            require(
+                IPostNFT(item.nftContract).ownerOf(item.tokenId) !=
+                    _msgSender(),
+                "Token owner not allowed"
+            );
+        } else {
+            require(
+                IBookNFT(item.nftContract).balanceOf(
+                    item.seller,
+                    item.tokenId
+                ) < item.amount,
+                "Marketplace: ERC1155 insufficient balance of the token."
+            );
+        }
+        if (item.erc20address != erc20address) {
+            require(
+                msg.value >= item.price,
+                "Marketplace: Payment method is not identical"
+            );
+        }
         require(
-            IPostNFT(nftContract).isApprovedForAll(seller, address(this)) && seller == IPostNFT(nftContract).ownerOf(tokenId),
-            "Token not approved nor owned"
+            _checkRoyalties(item.nftContract),
+            "Royalties are not available"
         );
-        require(
-            IPostNFT(nftContract).ownerOf(tokenId) != _msgSender(),
-            "Token owner not allowed"
-        );
-        require(
-            msg.value >= price,
-            "Please submit the asking price in order to complete the purchase"
-        );
-        require(_checkRoyalties(nftContract), "Royalties are not available");
+        item.state = State.Release;
+        item.buyer = payable(_msgSender());
+        marketItemsListed[itemId] = item;
+
         // Get amount of royalties to pays and recipient
         (address royaltiesReceiver, uint256 royaltiesAmount) = IERC2981(
-            nftContract
-        ).royaltyInfo(tokenId, price);
-        if (royaltiesAmount > 0) {
-            payable(royaltiesReceiver).transfer(royaltiesAmount);
+            item.nftContract
+        ).royaltyInfo(item.tokenId, item.price);
+
+        if (item.erc20address == address(0)) {
+            require(
+                msg.value >= item.price,
+                "Marketplace: Insufficient value paid for the item"
+            );
+            if (royaltiesAmount > 0) {
+                payable(royaltiesReceiver).transfer(royaltiesAmount);
+            }
+            payable(msg.sender).transfer(msg.value - royaltiesAmount);
+            if (item.isErc721) {
+                IPostNFT(item.nftContract).safeTransferFrom(
+                    item.seller,
+                    item.buyer,
+                    item.tokenId
+                );
+            } else {
+                IBookNFT(item.nftContract).safeTransferFrom(
+                    item.seller,
+                    item.buyer,
+                    item.tokenId,
+                    item.amount,
+                    ""
+                );
+            }
+        } else {
+            IERC20 token = IERC20(item.erc20address);
+            require(
+                token.allowance(_msgSender(), address(this)) >= item.price,
+                "Marketplace: Insufficient ERC20 allowance balance for paying for the asset."
+            );
+            if (royaltiesAmount > 0) {
+                token.transferFrom(
+                    item.buyer,
+                    royaltiesReceiver,
+                    royaltiesAmount
+                );
+            }
+            token.transferFrom(
+                item.buyer,
+                item.seller,
+                item.price - royaltiesAmount
+            );
+            if (item.isErc721) {
+                IPostNFT(item.nftContract).safeTransferFrom(
+                    item.seller,
+                    item.buyer,
+                    item.tokenId
+                );
+            } else {
+                IBookNFT(item.nftContract).safeTransferFrom(
+                    item.seller,
+                    item.buyer,
+                    item.tokenId,
+                    item.amount,
+                    ""
+                );
+            }
         }
-        idToMarketPostItem[itemId].seller.transfer(msg.value - royaltiesAmount);
-        IPostNFT(nftContract).transferFrom(
-            idToMarketPostItem[itemId].seller,
-            _msgSender(),
-            tokenId
-        );
-        idToMarketPostItem[itemId].owner = payable(_msgSender());
-        idToMarketPostItem[itemId].state = State.Release;
-        _itemsSold.increment();
-        payable(owner).transfer(listingPrice);
+        _toRemoveOpenItem(itemId);
+        emit MarketItemSold(item.buyer, item.itemId);
     }
 
-    // function purchaseBook(uint256 itemId, uint256 _amount)
-    //     public
-    //     payable
-    //     nonReentrant
-    // {
-    //     address nftContract = idToMarketBookItem[itemId].nftContract;
-    //     uint256 price = idToMarketBookItem[itemId].price;
-    //     uint256 tokenId = idToMarketBookItem[itemId].tokenId;
-    //     require(_amount <= idToMarketBookItem[itemId].amount, "Invalid amount");
-    //     require(
-    //         IBookNFT(nftContract).balanceOf(address(this), tokenId) >= _amount,
-    //         "Not enough balance"
-    //     );
-    // }
-
-    /* Returns all unsold market post items */
-    function fetchMarketPostItems()
-        public
-        view
-        returns (MarketPostItem[] memory)
-    {
-        uint256 itemCount = _postItemIds.current();
-        uint256 unsoldItemCount = _postItemIds.current() - _itemsSold.current();
-        uint256 currentIndex = 0;
-
-        MarketPostItem[] memory items = new MarketPostItem[](unsoldItemCount);
-        for (uint256 i = 0; i < itemCount; i++) {
-            if (idToMarketPostItem[i + 1].owner == address(0)) {
-                uint256 currentId = i + 1;
-                MarketPostItem storage currentItem = idToMarketPostItem[
-                    currentId
-                ];
-                items[currentIndex] = currentItem;
-                currentIndex += 1;
+    function _toRemoveOpenItem(bytes32 itemId) internal {
+        for (uint256 i = 0; i < _openItems.length; i++) {
+            if(_openItems[i] == itemId){
+                for(uint k = i;k<_openItems.length - 1;k++){
+                    _openItems[k] = _openItems[k+1];
+                }
+                _openItems.pop();
             }
         }
-        return items;
     }
 
-    /* Returns only post items that a user has purchased */
-    function fetchMyPosts() public view returns (MarketPostItem[] memory) {
-        uint256 totalItemCount = _postItemIds.current();
-        uint256 itemCount = 0;
-        uint256 currentIndex = 0;
+    
 
-        for (uint256 i = 0; i < totalItemCount; i++) {
-            if (idToMarketPostItem[i + 1].owner == _msgSender()) {
-                itemCount += 1;
-            }
-        }
 
-        MarketPostItem[] memory items = new MarketPostItem[](itemCount);
-        for (uint256 i = 0; i < totalItemCount; i++) {
-            if (idToMarketPostItem[i + 1].owner == _msgSender()) {
-                uint256 currentId = i + 1;
-                MarketPostItem storage currentItem = idToMarketPostItem[
-                    currentId
-                ];
-                items[currentIndex] = currentItem;
-                currentIndex += 1;
-            }
-        }
-        return items;
-    }
-
-    /* Returns only post items a user has created */
-    function fetchPostItemsCreated()
-        public
-        view
-        returns (MarketPostItem[] memory)
-    {
-        uint256 totalItemCount = _postItemIds.current();
-        uint256 itemCount = 0;
-        uint256 currentIndex = 0;
-
-        for (uint256 i = 0; i < totalItemCount; i++) {
-            if (idToMarketPostItem[i + 1].seller == _msgSender()) {
-                itemCount += 1;
-            }
-        }
-
-        MarketPostItem[] memory items = new MarketPostItem[](itemCount);
-        for (uint256 i = 0; i < totalItemCount; i++) {
-            if (idToMarketPostItem[i + 1].seller == _msgSender()) {
-                uint256 currentId = i + 1;
-                MarketPostItem storage currentItem = idToMarketPostItem[
-                    currentId
-                ];
-                items[currentIndex] = currentItem;
-                currentIndex += 1;
-            }
-        }
-        return items;
-    }
+    
 
     /**
      * @dev Checks if NFT contract implements the ERC-2981 interface
