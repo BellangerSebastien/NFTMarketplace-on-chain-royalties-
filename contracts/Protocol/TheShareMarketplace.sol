@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/interfaces/IERC2981.sol";
 import "@openzeppelin/contracts/interfaces/IERC20.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 import "../interfaces/iBookNFT.sol";
 import "../interfaces/iPostNFT.sol";
@@ -13,6 +14,8 @@ import "../interfaces/iPostNFT.sol";
 import "hardhat/console.sol";
 
 contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
+    using EnumerableSet for EnumerableSet.Bytes32Set;
+
     enum State {
         Active,
         Release,
@@ -35,7 +38,7 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
     }
 
     mapping(bytes32 => MarketItem) private marketItemsListed;
-    bytes32[] private _openItems;
+    EnumerableSet.Bytes32Set private _openItems;
 
     event MarketItemCreated(
         bytes32 itemId,
@@ -59,9 +62,7 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
         _;
     }
 
-    constructor() {
-        
-    }
+    constructor() {}
 
     /* Places an item for sale on the marketplace */
     function createMarketItem(
@@ -86,7 +87,10 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
                 "Marketplace: Not sufficient balance for the seller"
             );
             require(
-                IBookNFT(nftContract).isApprovedForAll(_msgSender(), address(this)),
+                IBookNFT(nftContract).isApprovedForAll(
+                    _msgSender(),
+                    address(this)
+                ),
                 "Marketplace: Token is not approved."
             );
         } else {
@@ -121,7 +125,7 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
             State.Active
         );
 
-        _openItems.push(itemId);
+        _openItems.add(itemId);
 
         emit MarketItemCreated(
             itemId,
@@ -134,7 +138,11 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
         );
     }
 
-    function cancelMarketPostItem(bytes32 itemId) public nonReentrant {
+    function cancelMarketItem(bytes32 itemId) public nonReentrant {
+        require(
+            _openItems.contains(itemId),
+            "Marketplace: Item is not listed at all"
+        );
         MarketItem memory item = marketItemsListed[itemId];
         require(
             item.state == State.Active,
@@ -142,12 +150,23 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
         );
         require(
             item.seller == _msgSender() || _msgSender() == owner(),
-            "Marketplace: Market item can't be cancelled from other then seller or owner. Aborting."
+            "Marketplace: Market item can't be cancelled from other then seller or market owner. Aborting."
         );
-
+        if (item.isErc721) {
+            if (
+                IPostNFT(item.nftContract).ownerOf(item.tokenId) != _msgSender()
+            ) revert("Marketplace: Not owner of the token");
+        } else {
+            if (
+                IBookNFT(item.nftContract).balanceOf(
+                    _msgSender(),
+                    item.tokenId
+                ) >= item.amount
+            ) revert("Marketplace: Not owner of the token");
+        }
         item.state = State.Inactive;
         marketItemsListed[itemId] = item;
-        _toRemoveOpenItem(itemId);
+        _openItems.remove(itemId);
         emit MarketItemCancelled(itemId);
     }
 
@@ -211,7 +230,7 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
             if (royaltiesAmount > 0) {
                 payable(royaltiesReceiver).transfer(royaltiesAmount);
             }
-            payable(msg.sender).transfer(msg.value - royaltiesAmount);
+            item.seller.transfer(msg.value - royaltiesAmount);
             if (item.isErc721) {
                 IPostNFT(item.nftContract).safeTransferFrom(
                     item.seller,
@@ -261,25 +280,9 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
                 );
             }
         }
-        _toRemoveOpenItem(itemId);
+        _openItems.remove(itemId);
         emit MarketItemSold(item.buyer, item.itemId);
     }
-
-    function _toRemoveOpenItem(bytes32 itemId) internal {
-        for (uint256 i = 0; i < _openItems.length; i++) {
-            if(_openItems[i] == itemId){
-                for(uint k = i;k<_openItems.length - 1;k++){
-                    _openItems[k] = _openItems[k+1];
-                }
-                _openItems.pop();
-            }
-        }
-    }
-
-    
-
-
-    
 
     /**
      * @dev Checks if NFT contract implements the ERC-2981 interface
