@@ -1,2 +1,2 @@
-require("./account");
+require("./accounts");
 require("./deploy");

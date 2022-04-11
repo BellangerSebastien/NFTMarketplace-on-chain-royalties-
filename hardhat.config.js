@@ -1,7 +1,7 @@
 require("@nomiclabs/hardhat-waffle");
 require("@nomiclabs/hardhat-ethers");
 require("hardhat-gas-reporter");
-require("tasks");
+require("./tasks");
 const { config } = require("dotenv");
 const { resolve } = require("path")
 

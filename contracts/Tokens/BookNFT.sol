@@ -6,6 +6,8 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/common/ERC2981.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
+import "hardhat/console.sol";
+
 contract BookNFT is ERC1155, Ownable, ERC2981 {
     using SafeMath for uint256;
 

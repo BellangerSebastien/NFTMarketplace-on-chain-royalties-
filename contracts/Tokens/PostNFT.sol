@@ -23,10 +23,12 @@ contract PostNFT is Ownable, ERC721Royalty {
     constructor(
         string memory _name,
         string memory _symbol,
+        string memory _uri,
         address _recipient,
         uint96 _royaltyAmount
     ) ERC721(_name, _symbol) {
         setRoyalty(_recipient, _royaltyAmount);
+        uriBase = _uri;
     }
 
     function totalSupply() public view virtual returns (uint256) {
