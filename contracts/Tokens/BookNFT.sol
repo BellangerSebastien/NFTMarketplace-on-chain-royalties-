@@ -5,10 +5,13 @@ import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/common/ERC2981.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 
 import "hardhat/console.sol";
 
-contract BookNFT is ERC1155, Ownable, ERC2981 {
+contract BookNFT is ERC1155, Ownable, ERC2981, AccessControl {
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+
     using SafeMath for uint256;
 
     mapping(uint256 => address) public creators;
@@ -49,6 +52,9 @@ contract BookNFT is ERC1155, Ownable, ERC2981 {
         address _recipient,
         uint96 _royaltyAmount
     ) ERC1155(_uri) {
+        _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
+        _setupRole(MINTER_ROLE, _msgSender());
+
         name = _name;
         symbol = _symbol;
         setRoyalty(_recipient, _royaltyAmount);
@@ -184,6 +190,32 @@ contract BookNFT is ERC1155, Ownable, ERC2981 {
         _mintBatch(_to, _ids, _quantities, _data);
     }
 
+    function burn(
+        address from,
+        uint256 id,
+        uint256 value
+    ) public virtual {
+        require(
+            from == _msgSender() || isApprovedForAll(from, _msgSender()),
+            "ERC1155: caller is not owner nor approved"
+        );
+
+        _burn(from, id, value);
+    }
+
+    function burnBatch(
+        address from,
+        uint256[] memory ids,
+        uint256[] memory values
+    ) public virtual {
+        require(
+            from == _msgSender() || isApprovedForAll(from, _msgSender()),
+            "ERC1155: caller is not owner nor approved"
+        );
+
+        _burnBatch(from, ids, values);
+    }
+
     /**
      * @dev Change the creator address for given tokens
      * @param _to   Address of the new creator
@@ -199,16 +231,6 @@ contract BookNFT is ERC1155, Ownable, ERC2981 {
 
     function creatorOf(uint256 _id) public view returns (address) {
         return creators[_id];
-    }
-
-    function burn(
-        address from,
-        uint256 id,
-        uint256 amount
-    ) public {
-        require(msg.sender == from);
-        _burn(from, id, amount);
-        // _resetTokenRoyalty(id);
     }
 
     // Value is in basis points so 10000 = 100% , 100 = 1% etc
@@ -238,7 +260,7 @@ contract BookNFT is ERC1155, Ownable, ERC2981 {
         public
         view
         virtual
-        override(ERC1155, ERC2981)
+        override(ERC1155, ERC2981, AccessControl)
         returns (bool)
     {
         return super.supportsInterface(interfaceId);
