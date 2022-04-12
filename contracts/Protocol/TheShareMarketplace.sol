@@ -22,7 +22,8 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
         Inactive
     }
 
-    uint256 public listingFee = 0.025 ether;
+    uint256 public listingFee;
+    address private _listingFeeRecipient;
 
     struct MarketItem {
         bytes32 itemId;
@@ -62,7 +63,10 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
         _;
     }
 
-    constructor() {}
+    constructor(address _recipient, uint256 _listingFee) {
+        _listingFeeRecipient = _recipient;
+        listingFee = _listingFee;
+    }
 
     /* Places an item for sale on the marketplace */
     function createMarketItem(
@@ -136,6 +140,7 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
             amount,
             price
         );
+        payable(_listingFeeRecipient).transfer(listingFee);
     }
 
     function cancelMarketItem(bytes32 itemId) public nonReentrant {
