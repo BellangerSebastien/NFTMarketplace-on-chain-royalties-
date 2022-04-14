@@ -3,11 +3,14 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Royalty.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 
 import "hardhat/console.sol";
 
-contract PostNFT is Ownable, ERC721Royalty {
+contract PostNFT is Ownable, AccessControl, ERC721Royalty {
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+
     using Counters for Counters.Counter;
 
     Counters.Counter private _tokenIds;
@@ -27,6 +30,9 @@ contract PostNFT is Ownable, ERC721Royalty {
         address _recipient,
         uint96 _royaltyAmount
     ) ERC721(_name, _symbol) {
+        _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
+        _setupRole(MINTER_ROLE, _msgSender());
+        
         setRoyalty(_recipient, _royaltyAmount);
         uriBase = _uri;
     }
@@ -89,9 +95,30 @@ contract PostNFT is Ownable, ERC721Royalty {
         return true;
     }
 
+    function safeTransfer(
+        address to,
+        uint256 tokenId,
+        bytes calldata data
+    ) public virtual {
+        super._safeTransfer(_msgSender(), to, tokenId, data);
+    }
+
+    function safeTransfer(address to, uint256 tokenId) public virtual {
+        super._safeTransfer(_msgSender(), to, tokenId, "");
+    }
+
     // Value is in basis points so 10000 = 100% , 100 = 1% etc
-    function setRoyalty(address _recipient, uint96 _value) public onlyOwner{
+    function setRoyalty(address _recipient, uint96 _value) public onlyOwner {
         _setDefaultRoyalty(_recipient, _value);
     }
 
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        virtual
+        override(ERC721Royalty, AccessControl)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
+    }
 }
