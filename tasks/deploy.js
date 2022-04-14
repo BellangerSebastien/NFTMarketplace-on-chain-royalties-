@@ -3,7 +3,7 @@ task("deploy:market", "Deploys NFT marketplace", async (_taskArgs, hre) => {
   const listingFeeRecipient = signer.address;
 
   const marketFactory = await ethers.getContractFactory("TheShareMarketplace");
-  market = await marketFactory.deploy(listingFeeRecipient, ethers.utils.parseEther('0.025'));
+  market = await marketFactory.deploy(listingFeeRecipient, ethers.utils.parseEther('0.025'), ethers.utils.parseEther('0.5'));
   await market.deployed();
   //To wait 5 blocks
   await market.deployTransaction.wait(5);

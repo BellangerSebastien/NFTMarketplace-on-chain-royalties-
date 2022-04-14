@@ -32,7 +32,7 @@ contract PostNFT is Ownable, AccessControl, ERC721Royalty {
     ) ERC721(_name, _symbol) {
         _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
         _setupRole(MINTER_ROLE, _msgSender());
-        
+
         setRoyalty(_recipient, _royaltyAmount);
         uriBase = _uri;
     }
@@ -78,13 +78,17 @@ contract PostNFT is Ownable, AccessControl, ERC721Royalty {
         );
         string memory _tokenURI = posts[tokenId].PostURI;
         string memory base = _baseURI();
-        return string(abi.encodePacked(base, _tokenURI));
+        if (bytes(_tokenURI).length > 0) {
+            return string(abi.encodePacked(base, _tokenURI));
+        } else {
+            return string(abi.encodePacked(base, address(this), "/", tokenId));
+        }
     }
 
     function mint(address to, string memory tokenDetails)
         public
         virtual
-        onlyOwner
+        onlyRole(MINTER_ROLE)
         returns (bool)
     {
         _tokenIds.increment();

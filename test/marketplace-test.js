@@ -57,7 +57,7 @@ describe("TheShare", () => {
       //post item
       await post.mint(signer.address, "Maxim's first post");
       await post.setApprovalForAll(market.address, true);
-      let itemId = ethers.utils.solidityKeccak256(['address', 'uint256', 'uint256', 'uint256', 'address'], [post.address, 1, auctionPrice, 0, ethers.constants.AddressZero]);
+      let itemId = ethers.utils.solidityKeccak256(['address', 'uint256', 'uint256', 'uint256', 'address', 'address'], [post.address, 1, auctionPrice, 0, ethers.constants.AddressZero, signer.address]);
       await expect(market.createMarketItem(true, post.address, 1, auctionPrice, 0, ethers.constants.AddressZero, { value: listingFee }))
         .to.emit(market, 'MarketItemCreated')
         .withArgs(
@@ -74,7 +74,7 @@ describe("TheShare", () => {
       const tokenId = 1;
       await book.create(signer.address, tokenId, ethers.utils.parseEther('1000000'), `${name}/${tokenId}`, 0x0);
       await book.setApprovalForAll(market.address, true);
-      itemId = ethers.utils.solidityKeccak256(['address', 'uint256', 'uint256', 'uint256', 'address'], [book.address, tokenId, auctionPrice, ethers.utils.parseEther('1000'), ethers.constants.AddressZero]);
+      itemId = ethers.utils.solidityKeccak256(['address', 'uint256', 'uint256', 'uint256', 'address', 'address'], [book.address, tokenId, auctionPrice, ethers.utils.parseEther('1000'), ethers.constants.AddressZero, signer.address]);
       expect(await market.createMarketItem(false, book.address, tokenId, auctionPrice, ethers.utils.parseEther('1000'), ethers.constants.AddressZero, { value: listingFee }))
         .to.emit(market, 'MarketItemCreated')
         .withArgs(
@@ -109,7 +109,7 @@ describe("TheShare", () => {
       await post.setApprovalForAll(market.address, true);
       expect(await market.createMarketItem(true, post.address, 1, auctionPrice, 0, ethers.constants.AddressZero, { value: listingFee })).to.be;
       await post.transferFrom(signer.address, account1.address, 1);
-      const itemId = ethers.utils.solidityKeccak256(['address', 'uint256', 'uint256', 'uint256', 'address'], [post.address, 1, auctionPrice, 0, ethers.constants.AddressZero]);
+      const itemId = ethers.utils.solidityKeccak256(['address', 'uint256', 'uint256', 'uint256', 'address', 'address'], [post.address, 1, auctionPrice, 0, ethers.constants.AddressZero, signer.address]);
 
       await expect(market.connect(account2).purchaseItem(itemId, ethers.constants.AddressZero, { value: auctionPrice })).to.be.revertedWith("Token not approved nor owned");
     });
@@ -119,7 +119,7 @@ describe("TheShare", () => {
       await post.mint(signer.address, "Maxim's first post");
       await post.setApprovalForAll(market.address, true);
       await market.createMarketItem(true, post.address, 1, auctionPrice, 0, ethers.constants.AddressZero, { value: listingFee });
-      const itemId = ethers.utils.solidityKeccak256(['address', 'uint256', 'uint256', 'uint256', 'address'], [post.address, 1, auctionPrice, 0, ethers.constants.AddressZero]);
+      const itemId = ethers.utils.solidityKeccak256(['address', 'uint256', 'uint256', 'uint256', 'address', 'address'], [post.address, 1, auctionPrice, 0, ethers.constants.AddressZero, signer.address]);
       await market.cancelMarketItem(itemId);
 
       await expect(market.connect(account1).purchaseItem(itemId, ethers.constants.AddressZero, { value: auctionPrice })).to.be.reverted;
@@ -130,8 +130,8 @@ describe("TheShare", () => {
       await post.mint(signer.address, "Maxim's first post");
       await post.setApprovalForAll(market.address, true);
       await market.createMarketItem(true, post.address, 1, auctionPrice, 0, ethers.constants.AddressZero, { value: listingFee });
-      const itemId = ethers.utils.solidityKeccak256(['address', 'uint256', 'uint256', 'uint256', 'address'], [post.address, 1, auctionPrice, 0, ethers.constants.AddressZero]);
-      const wrongItemId = ethers.utils.solidityKeccak256(['address', 'uint256', 'uint256', 'uint256', 'address'], [post.address, 2, auctionPrice, 0, ethers.constants.AddressZero]);
+      const itemId = ethers.utils.solidityKeccak256(['address', 'uint256', 'uint256', 'uint256', 'address', 'address'], [post.address, 1, auctionPrice, 0, ethers.constants.AddressZero, signer.address]);
+      const wrongItemId = ethers.utils.solidityKeccak256(['address', 'uint256', 'uint256', 'uint256', 'address', 'address'], [post.address, 2, auctionPrice, 0, ethers.constants.AddressZero, signer.address]);
       //not a correct post item id
       await expect(market.cancelMarketItem(wrongItemId)).to.be.revertedWith("Marketplace: Item is not listed at all");
       //not approved to market now
@@ -155,7 +155,7 @@ describe("TheShare", () => {
       let listingFeeRecipientBal = await ethers.provider.getBalance(listingFeeRecipient);
       let txresponse = await market.connect(account1).createMarketItem(true, post.address, 1, auctionPrice, 0, ethers.constants.AddressZero, { value: listingFee });
       const listingFeeRecipientBalAfterlisting = await ethers.provider.getBalance(listingFeeRecipient);
-      const itemId = ethers.utils.solidityKeccak256(['address', 'uint256', 'uint256', 'uint256', 'address'], [post.address, 1, auctionPrice, 0, ethers.constants.AddressZero]);
+      const itemId = ethers.utils.solidityKeccak256(['address', 'uint256', 'uint256', 'uint256', 'address', 'address'], [post.address, 1, auctionPrice, 0, ethers.constants.AddressZero, signer.address]);
 
       const sellerBalAfterSale = await ethers.provider.getBalance(account1.address);
 

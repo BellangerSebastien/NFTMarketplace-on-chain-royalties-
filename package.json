@@ -6,6 +6,7 @@
     "@openzeppelin/contracts": "^4.5.0",
     "chai": "^4.2.0",
     "dotenv": "^16.0.0",
+    "erc721a": "^3.2.0",
     "ethereum-waffle": "^3.0.0",
     "ethers": "^5.0.0",
     "hardhat": "^2.9.2",

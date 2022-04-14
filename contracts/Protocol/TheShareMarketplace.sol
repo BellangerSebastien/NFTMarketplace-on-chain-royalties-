@@ -23,6 +23,7 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
     }
 
     uint256 public listingFee;
+    uint256 public floorPrice;
     address private _listingFeeRecipient;
 
     struct MarketItem {
@@ -63,9 +64,47 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
         _;
     }
 
-    constructor(address _recipient, uint256 _listingFee) {
+    constructor(
+        address _recipient,
+        uint256 _listingFee,
+        uint256 _floorPrice
+    ) {
         _listingFeeRecipient = _recipient;
         listingFee = _listingFee;
+        floorPrice = _floorPrice;
+    }
+
+    function getListingFeeRecipient() public view virtual returns (address) {
+        return _listingFeeRecipient;
+    }
+
+    function getMarketItem(bytes32 itemId)
+        public
+        view
+        virtual
+        returns (MarketItem memory)
+    {
+        return marketItemsListed[itemId];
+    }
+
+    function setListingFee(uint256 _listingFee) public virtual onlyOwner {
+        listingFee = _listingFee;
+    }
+
+    function setListingFeeRecipient(address _recipient)
+        public
+        virtual
+        onlyOwner
+    {
+        _listingFeeRecipient = _recipient;
+    }
+
+    function setFloorPrice(uint256 _floorPrice) public onlyOwner {
+        floorPrice = _floorPrice;
+    }
+
+    function getOpenItems() public view virtual returns (bytes32[] memory) {
+        return _openItems.values();
     }
 
     /* Places an item for sale on the marketplace */
@@ -77,11 +116,11 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
         uint256 amount,
         address erc20address
     ) public payable nonReentrant {
-        bytes32 itemId = keccak256(
-            abi.encodePacked(nftContract, tokenId, price, amount, erc20address)
+        bytes32 _itemId = keccak256(
+            abi.encodePacked(nftContract, tokenId, amount, _msgSender())
         );
-        if (marketItemsListed[itemId].itemId == itemId)
-            revert("Marketplace: Item already exists for the current id");
+        // if (marketItemsListed[_itemId].itemId == _itemId)
+        //     revert("Marketplace: Item already exists for the current id");
 
         if (!isErc721) {
             require(amount > 0);
@@ -116,8 +155,8 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
             "Price must be equal to listing price"
         );
 
-        marketItemsListed[itemId] = MarketItem(
-            itemId,
+        marketItemsListed[_itemId] = MarketItem(
+            _itemId,
             isErc721,
             nftContract,
             tokenId,
@@ -129,10 +168,10 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
             State.Active
         );
 
-        _openItems.add(itemId);
+        _openItems.add(_itemId);
 
         emit MarketItemCreated(
-            itemId,
+            _itemId,
             isErc721,
             nftContract,
             tokenId,
