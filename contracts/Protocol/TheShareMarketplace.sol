@@ -240,7 +240,7 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
                 "Token owner not allowed"
             );
         } else {
-            require(amount>0);
+            require(amount > 0);
             require(
                 amount < item.amount &&
                     IBookNFT(item.nftContract).balanceOf(
@@ -277,7 +277,10 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
                     royaltiesAmount.mul(amount)
                 );
             }
-            payable(_msgSender()).transfer(msg.value - item.price.mul(amount));
+            if (msg.value > item.price.mul(amount))
+                payable(_msgSender()).transfer(
+                    msg.value - item.price.mul(amount)
+                );
             item.seller.transfer(item.price.sub(royaltiesAmount).mul(amount));
             if (item.isErc721) {
                 IPostNFT(item.nftContract).safeTransferFrom(

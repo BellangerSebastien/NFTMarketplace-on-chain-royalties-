@@ -172,7 +172,7 @@ contract BookNFT is ERC1155, Ownable, ERC2981, AccessControl {
      * @param _quantities  Array of amounts of tokens to mint per id
      * @param _data        Data to pass if receiver is contract
      */
-    function batchMint(
+    function mintBatch(
         address _to,
         uint256[] memory _ids,
         uint256[] memory _quantities,
@@ -182,7 +182,7 @@ contract BookNFT is ERC1155, Ownable, ERC2981, AccessControl {
             uint256 _id = _ids[i];
             require(
                 creators[_id] == _msgSender(),
-                "ERC1155#batchMint: ONLY_CREATOR_ALLOWED"
+                "ERC1155#mintBatch: ONLY_CREATOR_ALLOWED"
             );
             uint256 quantity = _quantities[i];
             tokenSupply[_id] = tokenSupply[_id].add(quantity);
