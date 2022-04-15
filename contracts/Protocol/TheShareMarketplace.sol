@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/interfaces/IERC20.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 import "../interfaces/iBookNFT.sol";
 import "../interfaces/iPostNFT.sol";
@@ -15,6 +16,7 @@ import "hardhat/console.sol";
 
 contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
     using EnumerableSet for EnumerableSet.Bytes32Set;
+    using SafeMath for uint256;
 
     enum State {
         Active,
@@ -23,6 +25,7 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
     }
 
     uint256 public listingFee;
+    uint256 public floorPrice;
     address private _listingFeeRecipient;
 
     struct MarketItem {
@@ -41,7 +44,7 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
     mapping(bytes32 => MarketItem) private marketItemsListed;
     EnumerableSet.Bytes32Set private _openItems;
 
-    event MarketItemCreated(
+    event MarketItemUpdated(
         bytes32 itemId,
         bool indexed isErc721,
         address indexed nftContract,
@@ -50,8 +53,6 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
         uint256 amount,
         uint256 price
     );
-
-    event MarketItemSold(address indexed buyer, bytes32 itemId);
 
     event MarketItemCancelled(bytes32 itemId);
 
@@ -63,9 +64,47 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
         _;
     }
 
-    constructor(address _recipient, uint256 _listingFee) {
+    constructor(
+        address _recipient,
+        uint256 _listingFee,
+        uint256 _floorPrice
+    ) {
         _listingFeeRecipient = _recipient;
         listingFee = _listingFee;
+        floorPrice = _floorPrice;
+    }
+
+    function getListingFeeRecipient() public view virtual returns (address) {
+        return _listingFeeRecipient;
+    }
+
+    function getMarketItem(bytes32 itemId)
+        public
+        view
+        virtual
+        returns (MarketItem memory)
+    {
+        return marketItemsListed[itemId];
+    }
+
+    function setListingFee(uint256 _listingFee) public virtual onlyOwner {
+        listingFee = _listingFee;
+    }
+
+    function setListingFeeRecipient(address _recipient)
+        public
+        virtual
+        onlyOwner
+    {
+        _listingFeeRecipient = _recipient;
+    }
+
+    function setFloorPrice(uint256 _floorPrice) public onlyOwner {
+        floorPrice = _floorPrice;
+    }
+
+    function getOpenItems() public view virtual returns (bytes32[] memory) {
+        return _openItems.values();
     }
 
     /* Places an item for sale on the marketplace */
@@ -77,11 +116,11 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
         uint256 amount,
         address erc20address
     ) public payable nonReentrant {
-        bytes32 itemId = keccak256(
-            abi.encodePacked(nftContract, tokenId, price, amount, erc20address)
+        bytes32 _itemId = keccak256(
+            abi.encodePacked(nftContract, tokenId, amount, _msgSender())
         );
-        if (marketItemsListed[itemId].itemId == itemId)
-            revert("Marketplace: Item already exists for the current id");
+        // if (marketItemsListed[_itemId].itemId == _itemId)
+        //     revert("Marketplace: Item already exists for the current id");
 
         if (!isErc721) {
             require(amount > 0);
@@ -98,6 +137,7 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
                 "Marketplace: Token is not approved."
             );
         } else {
+            require(amount == 1);
             require(
                 IPostNFT(nftContract).ownerOf(tokenId) == _msgSender(),
                 "Marketplace: Not token owner"
@@ -116,8 +156,8 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
             "Price must be equal to listing price"
         );
 
-        marketItemsListed[itemId] = MarketItem(
-            itemId,
+        marketItemsListed[_itemId] = MarketItem(
+            _itemId,
             isErc721,
             nftContract,
             tokenId,
@@ -129,10 +169,10 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
             State.Active
         );
 
-        _openItems.add(itemId);
+        _openItems.add(_itemId);
 
-        emit MarketItemCreated(
-            itemId,
+        emit MarketItemUpdated(
+            _itemId,
             isErc721,
             nftContract,
             tokenId,
@@ -177,14 +217,14 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
 
     /* Creates the sale of a marketplace item */
     /* Transfers ownership of the item, as well as funds between parties */
-    function purchaseItem(bytes32 itemId, address erc20address)
-        public
-        payable
-        isForSale(itemId)
-        nonReentrant
-    {
+    function purchaseItem(
+        bytes32 itemId,
+        uint256 amount,
+        address erc20address
+    ) public payable isForSale(itemId) nonReentrant {
         MarketItem memory item = marketItemsListed[itemId];
         if (item.isErc721) {
+            require(amount == 1);
             require(
                 IPostNFT(item.nftContract).isApprovedForAll(
                     item.seller,
@@ -200,17 +240,20 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
                 "Token owner not allowed"
             );
         } else {
+            require(amount>0);
             require(
-                IBookNFT(item.nftContract).balanceOf(
-                    item.seller,
-                    item.tokenId
-                ) < item.amount,
+                amount < item.amount &&
+                    IBookNFT(item.nftContract).balanceOf(
+                        item.seller,
+                        item.tokenId
+                    ) >
+                    amount,
                 "Marketplace: ERC1155 insufficient balance of the token."
             );
         }
         if (item.erc20address != erc20address) {
             require(
-                msg.value >= item.price,
+                msg.value >= item.price.mul(amount),
                 "Marketplace: Payment method is not identical"
             );
         }
@@ -218,9 +261,6 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
             _checkRoyalties(item.nftContract),
             "Royalties are not available"
         );
-        item.state = State.Release;
-        item.buyer = payable(_msgSender());
-        marketItemsListed[itemId] = item;
 
         // Get amount of royalties to pays and recipient
         (address royaltiesReceiver, uint256 royaltiesAmount) = IERC2981(
@@ -229,13 +269,16 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
 
         if (item.erc20address == address(0)) {
             require(
-                msg.value >= item.price,
+                msg.value >= item.price.mul(amount),
                 "Marketplace: Insufficient value paid for the item"
             );
             if (royaltiesAmount > 0) {
-                payable(royaltiesReceiver).transfer(royaltiesAmount);
+                payable(royaltiesReceiver).transfer(
+                    royaltiesAmount.mul(amount)
+                );
             }
-            item.seller.transfer(msg.value - royaltiesAmount);
+            payable(_msgSender()).transfer(msg.value - item.price.mul(amount));
+            item.seller.transfer(item.price.sub(royaltiesAmount).mul(amount));
             if (item.isErc721) {
                 IPostNFT(item.nftContract).safeTransferFrom(
                     item.seller,
@@ -254,20 +297,21 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
         } else {
             IERC20 token = IERC20(item.erc20address);
             require(
-                token.allowance(_msgSender(), address(this)) >= item.price,
+                token.allowance(_msgSender(), address(this)) >=
+                    item.price.mul(amount),
                 "Marketplace: Insufficient ERC20 allowance balance for paying for the asset."
             );
             if (royaltiesAmount > 0) {
                 token.transferFrom(
                     item.buyer,
                     royaltiesReceiver,
-                    royaltiesAmount
+                    royaltiesAmount.mul(amount)
                 );
             }
             token.transferFrom(
                 item.buyer,
                 item.seller,
-                item.price - royaltiesAmount
+                item.price.sub(royaltiesAmount).mul(amount)
             );
             if (item.isErc721) {
                 IPostNFT(item.nftContract).safeTransferFrom(
@@ -285,8 +329,27 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
                 );
             }
         }
-        _openItems.remove(itemId);
-        emit MarketItemSold(item.buyer, item.itemId);
+        item.buyer = payable(_msgSender());
+        if (item.isErc721) {
+            item.state = State.Release;
+            _openItems.remove(itemId);
+        } else {
+            item.amount = item.amount.sub(amount);
+            if (item.amount == 0) {
+                item.state = State.Release;
+                _openItems.remove(itemId);
+            }
+        }
+        marketItemsListed[itemId] = item;
+        emit MarketItemUpdated(
+            itemId,
+            item.isErc721,
+            item.nftContract,
+            item.tokenId,
+            item.erc20address,
+            item.amount,
+            item.price
+        );
     }
 
     /**
