@@ -116,6 +116,15 @@ contract PostNFT is Ownable, AccessControl, ERC721Royalty {
         _setDefaultRoyalty(_recipient, _value);
     }
 
+    function setTokenRoyalty(
+        uint256 tokenId,
+        address receiver,
+        uint96 feeNumerator
+    ) public {
+        require(ownerOf(tokenId)==_msgSender(),"ERC721: Only token owner allowed.");
+        _setTokenRoyalty(tokenId, receiver, feeNumerator);
+    }
+
     function supportsInterface(bytes4 interfaceId)
         public
         view
