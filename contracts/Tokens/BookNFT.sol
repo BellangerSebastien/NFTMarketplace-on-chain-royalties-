@@ -238,6 +238,15 @@ contract BookNFT is ERC1155, Ownable, ERC2981, AccessControl {
         _setDefaultRoyalty(_recipient, value);
     }
 
+    function setTokenRoyalty(
+        uint256 tokenId,
+        address receiver,
+        uint96 feeNumerator
+    ) public {
+        require(creatorOf(tokenId)==_msgSender(),"BookNFT: Only token owner allowed.");
+        _setTokenRoyalty(tokenId, receiver, feeNumerator);
+    }
+
     /**
      * @dev Returns whether the specified token exists by checking to see if it has a creator
      * @param _id uint256 ID of the token to query the existence of
