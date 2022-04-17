@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/utils/Address.sol";
 import "../interfaces/iBookNFT.sol";
 import "../interfaces/iPostNFT.sol";
 
-contract NftAuction is Ownable {
+contract TheShareAuction is Ownable {
     using Address for address;
 
     struct Auction {

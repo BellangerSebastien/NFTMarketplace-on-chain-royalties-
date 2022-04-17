@@ -143,10 +143,7 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
                 "Marketplace: Not token owner"
             );
             require(
-                IPostNFT(nftContract).isApprovedForAll(
-                    _msgSender(),
-                    address(this)
-                ),
+                IPostNFT(nftContract).getApproved(tokenId) == address(this),
                 "Marketplace: Token is not approved."
             );
         }
@@ -223,13 +220,12 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
         address erc20address
     ) public payable isForSale(itemId) nonReentrant {
         MarketItem memory item = marketItemsListed[itemId];
+        console.log(item.isErc721);
         if (item.isErc721) {
             require(amount == 1);
             require(
-                IPostNFT(item.nftContract).isApprovedForAll(
-                    item.seller,
-                    address(this)
-                ) &&
+                IPostNFT(item.nftContract).getApproved(item.tokenId) ==
+                    address(this) &&
                     IPostNFT(item.nftContract).ownerOf(item.tokenId) ==
                     item.seller,
                 "Token not approved nor owned"
@@ -240,15 +236,22 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
                 "Token owner not allowed"
             );
         } else {
-            require(amount>0);
+            require(amount > 0);
             require(
-                amount < item.amount &&
+                amount <= item.amount &&
                     IBookNFT(item.nftContract).balanceOf(
                         item.seller,
                         item.tokenId
-                    ) >
+                    ) >=
                     amount,
                 "Marketplace: ERC1155 insufficient balance of the token."
+            );
+            require(
+                IBookNFT(item.nftContract).isApprovedForAll(
+                    item.seller,
+                    address(this)
+                ),
+                "Marketplace: Token is not approved."
             );
         }
         if (item.erc20address != erc20address) {
@@ -266,6 +269,7 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
         (address royaltiesReceiver, uint256 royaltiesAmount) = IERC2981(
             item.nftContract
         ).royaltyInfo(item.tokenId, item.price);
+        item.buyer = payable(_msgSender());
 
         if (item.erc20address == address(0)) {
             require(
@@ -277,9 +281,13 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
                     royaltiesAmount.mul(amount)
                 );
             }
-            payable(_msgSender()).transfer(msg.value - item.price.mul(amount));
+            if (msg.value > item.price.mul(amount))
+                payable(_msgSender()).transfer(
+                    msg.value - item.price.mul(amount)
+                );
             item.seller.transfer(item.price.sub(royaltiesAmount).mul(amount));
             if (item.isErc721) {
+                console.log(item.buyer);
                 IPostNFT(item.nftContract).safeTransferFrom(
                     item.seller,
                     item.buyer,
@@ -329,7 +337,6 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
                 );
             }
         }
-        item.buyer = payable(_msgSender());
         if (item.isErc721) {
             item.state = State.Release;
             _openItems.remove(itemId);
