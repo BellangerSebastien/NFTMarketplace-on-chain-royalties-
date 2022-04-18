@@ -67,7 +67,7 @@ contract BookNFT is ERC1155, Ownable, ERC2981, AccessControl {
         if (customUriBytes.length > 0) {
             return customUri[_id];
         } else {
-            return super.uri(_id);
+            return string(abi.encodePacked(super.uri(_id),address(this),"/",_id));
         }
     }
 
