@@ -57,7 +57,7 @@ contract BookNFT is ERC1155, Ownable, ERC2981, AccessControl {
 
         name = _name;
         symbol = _symbol;
-        setRoyalty(_recipient, _royaltyAmount);
+        setRoyalties(_recipient, _royaltyAmount);
     }
 
     function uri(uint256 _id) public view override returns (string memory) {
@@ -67,7 +67,7 @@ contract BookNFT is ERC1155, Ownable, ERC2981, AccessControl {
         if (customUriBytes.length > 0) {
             return customUri[_id];
         } else {
-            return super.uri(_id);
+            return string(abi.encodePacked(super.uri(_id),address(this),"/",_id));
         }
     }
 
@@ -234,7 +234,7 @@ contract BookNFT is ERC1155, Ownable, ERC2981, AccessControl {
     }
 
     // Value is in basis points so 10000 = 100% , 100 = 1% etc
-    function setRoyalty(address _recipient, uint96 value) public {
+    function setRoyalties(address _recipient, uint96 value) public onlyOwner {
         _setDefaultRoyalty(_recipient, value);
     }
 
