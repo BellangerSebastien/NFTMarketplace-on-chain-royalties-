@@ -17,6 +17,9 @@ config({ path: resolve(__dirname, "./.env") });
 
 const mnemonic = process.env.MNEMONIC;
 module.exports = {
+  // paths:{
+  //   artifacts:'./src/artifacts'
+  // },
   solidity: {
     version: "0.8.4",
     settings: {
