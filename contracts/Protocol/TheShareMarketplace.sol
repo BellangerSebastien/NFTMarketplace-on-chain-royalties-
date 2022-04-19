@@ -401,4 +401,8 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
         );
         return success;
     }
+
+    function withdraw(address _recipient) external onlyOwner {
+        payable(_recipient).transfer(address(this).balance);
+    }
 }
