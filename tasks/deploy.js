@@ -23,8 +23,6 @@ task("deploy:book", "Deploys Book NFT", async (_taskArgs, hre) => {
   await book.deployed();
   //To wait 5 blocks
   await book.deployTransaction.wait(5);
-  const tokenId = 1234;
-  await book.create(signer.address, tokenId, 1000000, "", 0x0);
 
 
   //verify smart contract code with etherscan
