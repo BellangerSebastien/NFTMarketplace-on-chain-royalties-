@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 pragma solidity ^0.8.3;
 
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/interfaces/IERC20.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
@@ -9,7 +10,7 @@ import "@openzeppelin/contracts/utils/Address.sol";
 import "../interfaces/iBookNFT.sol";
 import "../interfaces/iPostNFT.sol";
 
-contract TheShareAuction is Ownable {
+contract TheShareAuction is Ownable, ReentrancyGuard {
     using Address for address;
 
     struct Auction {
@@ -161,7 +162,7 @@ contract TheShareAuction is Ownable {
         address seller,
         uint256 tokenId,
         uint256 amount
-    ) internal view{
+    ) internal view {
         if (!isErc721) {
             require(amount > 0);
             require(
@@ -454,7 +455,7 @@ contract TheShareAuction is Ownable {
     /**
      * Settle the already ended auction -
      */
-    function settleAuction(string memory id) public payable virtual {
+    function settleAuction(string memory id) public payable virtual nonReentrant {
         // fee must be sent to the fee recipient
         // NFT token to the bidder
         // payout to the seller

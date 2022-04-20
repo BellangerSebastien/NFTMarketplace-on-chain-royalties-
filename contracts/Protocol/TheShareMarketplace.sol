@@ -14,7 +14,7 @@ import "../interfaces/iPostNFT.sol";
 
 import "hardhat/console.sol";
 
-contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
+contract TheShareMarketplace is ReentrancyGuard, Ownable {
     using EnumerableSet for EnumerableSet.Bytes32Set;
     using SafeMath for uint256;
 
@@ -179,11 +179,6 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
             );
         }
 
-        require(
-            msg.value == listingFee,
-            "Price must be equal to listing price"
-        );
-
         marketItemsListed[_itemId] = MarketItem(
             _itemId,
             isErc721,
@@ -208,7 +203,7 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
             amount,
             price
         );
-        payable(_listingFeeRecipient).transfer(listingFee);
+        // payable(_listingFeeRecipient).transfer(listingFee);
     }
 
     function cancelMarketItem(bytes32 itemId) public nonReentrant {
@@ -285,9 +280,10 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
                 "Marketplace: Token is not approved."
             );
         }
+        uint256 priceWithFee = item.price.mul(listingFee.add(10000)).div(10000);
         if (item.erc20address != erc20address) {
             require(
-                msg.value >= item.price.mul(amount),
+                msg.value >= priceWithFee.mul(amount),
                 "Marketplace: Payment method is not identical"
             );
         }
@@ -304,7 +300,7 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
 
         if (item.erc20address == address(0)) {
             require(
-                msg.value >= item.price.mul(amount),
+                msg.value >= priceWithFee.mul(amount),
                 "Marketplace: Insufficient value paid for the item"
             );
             if (royaltiesAmount > 0) {
@@ -312,10 +308,13 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
                     royaltiesAmount.mul(amount)
                 );
             }
-            if (msg.value > item.price.mul(amount))
+            if (msg.value > priceWithFee.mul(amount))
                 payable(_msgSender()).transfer(
-                    msg.value - item.price.mul(amount)
+                    msg.value - priceWithFee.mul(amount)
                 );
+            payable(_listingFeeRecipient).transfer(
+                priceWithFee.sub(item.price).mul(amount)
+            );
             item.seller.transfer(item.price.sub(royaltiesAmount).mul(amount));
             if (item.isErc721) {
                 console.log(item.buyer);
@@ -337,9 +336,16 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
             IERC20 token = IERC20(item.erc20address);
             require(
                 token.allowance(_msgSender(), address(this)) >=
-                    item.price.mul(amount),
+                    priceWithFee.mul(amount),
                 "Marketplace: Insufficient ERC20 allowance balance for paying for the asset."
             );
+            // marketplace fee
+            token.transferFrom(
+                item.buyer,
+                _listingFeeRecipient,
+                priceWithFee.sub(item.price).mul(amount)
+            );
+            // royalties
             if (royaltiesAmount > 0) {
                 token.transferFrom(
                     item.buyer,
@@ -347,6 +353,7 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
                     royaltiesAmount.mul(amount)
                 );
             }
+            // price
             token.transferFrom(
                 item.buyer,
                 item.seller,
@@ -402,7 +409,7 @@ contract TheShareMarketplace is Context, ReentrancyGuard, Ownable {
         return success;
     }
 
-    function withdraw(address _recipient) external onlyOwner {
+    function withdraw(address _recipient) external onlyOwner nonReentrant {
         payable(_recipient).transfer(address(this).balance);
     }
 }
