@@ -24,9 +24,9 @@ contract TheShareMarketplace is ReentrancyGuard, Ownable {
         Inactive
     }
 
-    uint256 public listingFee;
+    uint256 private _marketFee;
     uint256 public floorPrice;
-    address private _listingFeeRecipient;
+    address private _marketFeeRecipient;
 
     struct MarketItem {
         bytes32 itemId;
@@ -97,16 +97,16 @@ contract TheShareMarketplace is ReentrancyGuard, Ownable {
 
     constructor(
         address _recipient,
-        uint256 _listingFee,
+        uint256 _feeAmount,
         uint256 _floorPrice
     ) {
-        _listingFeeRecipient = _recipient;
-        listingFee = _listingFee;
+        _marketFeeRecipient = _recipient;
+        _marketFee = _feeAmount;
         floorPrice = _floorPrice;
     }
 
-    function getListingFeeRecipient() public view virtual returns (address) {
-        return _listingFeeRecipient;
+    function getMarketFeeRecipient() public view virtual returns (address) {
+        return _marketFeeRecipient;
     }
 
     function getMarketItem(bytes32 itemId)
@@ -118,16 +118,20 @@ contract TheShareMarketplace is ReentrancyGuard, Ownable {
         return marketItemsListed[itemId];
     }
 
-    function setListingFee(uint256 _listingFee) public virtual onlyOwner {
-        listingFee = _listingFee;
+    function getMarketFee() public view returns(uint){
+        return _marketFee;
     }
 
-    function setListingFeeRecipient(address _recipient)
+    function setMarketFee(uint256 _feeAmount) public virtual onlyOwner {
+        _marketFee = _feeAmount;
+    }
+
+    function setMarketFeeRecipient(address _recipient)
         public
         virtual
         onlyOwner
     {
-        _listingFeeRecipient = _recipient;
+        _marketFeeRecipient = _recipient;
     }
 
     function setFloorPrice(uint256 _floorPrice) public onlyOwner {
@@ -203,7 +207,7 @@ contract TheShareMarketplace is ReentrancyGuard, Ownable {
             amount,
             price
         );
-        // payable(_listingFeeRecipient).transfer(listingFee);
+        // payable(_marketFeeRecipient).transfer(_marketFee);
     }
 
     function cancelMarketItem(bytes32 itemId) public nonReentrant {
@@ -280,7 +284,7 @@ contract TheShareMarketplace is ReentrancyGuard, Ownable {
                 "Marketplace: Token is not approved."
             );
         }
-        uint256 priceWithFee = item.price.mul(listingFee.add(10000)).div(10000);
+        uint256 priceWithFee = item.price.mul(_marketFee.add(10000)).div(10000);
         if (item.erc20address != erc20address) {
             require(
                 msg.value >= priceWithFee.mul(amount),
@@ -312,7 +316,7 @@ contract TheShareMarketplace is ReentrancyGuard, Ownable {
                 payable(_msgSender()).transfer(
                     msg.value - priceWithFee.mul(amount)
                 );
-            payable(_listingFeeRecipient).transfer(
+            payable(_marketFeeRecipient).transfer(
                 priceWithFee.sub(item.price).mul(amount)
             );
             item.seller.transfer(item.price.sub(royaltiesAmount).mul(amount));
@@ -342,7 +346,7 @@ contract TheShareMarketplace is ReentrancyGuard, Ownable {
             // marketplace fee
             token.transferFrom(
                 item.buyer,
-                _listingFeeRecipient,
+                _marketFeeRecipient,
                 priceWithFee.sub(item.price).mul(amount)
             );
             // royalties
