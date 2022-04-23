@@ -12,8 +12,6 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "../interfaces/iBookNFT.sol";
 import "../interfaces/iPostNFT.sol";
 
-import "hardhat/console.sol";
-
 contract TheShareMarketplace is ReentrancyGuard, Ownable {
     using EnumerableSet for EnumerableSet.Bytes32Set;
     using SafeMath for uint256;
@@ -250,7 +248,6 @@ contract TheShareMarketplace is ReentrancyGuard, Ownable {
         address erc20address
     ) public payable isForSale(itemId) nonReentrant {
         MarketItem memory item = marketItemsListed[itemId];
-        console.log(item.isErc721);
         if (item.isErc721) {
             require(amount == 1);
             require(
@@ -321,7 +318,6 @@ contract TheShareMarketplace is ReentrancyGuard, Ownable {
             );
             item.seller.transfer(item.price.sub(royaltiesAmount).mul(amount));
             if (item.isErc721) {
-                console.log(item.buyer);
                 IPostNFT(item.nftContract).safeTransferFrom(
                     item.seller,
                     item.buyer,
