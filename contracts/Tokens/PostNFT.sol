@@ -6,8 +6,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 
-import "hardhat/console.sol";
-
 contract PostNFT is Ownable, AccessControl, ERC721Royalty {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
@@ -94,7 +92,6 @@ contract PostNFT is Ownable, AccessControl, ERC721Royalty {
         _tokenIds.increment();
         uint256 tokenID = _tokenIds.current();
         posts[tokenID] = PostStruct(tokenDetails, "");
-        // console.log("Token ID in smart contract: ",tokenID);
         _safeMint(to, tokenID);
         return true;
     }
