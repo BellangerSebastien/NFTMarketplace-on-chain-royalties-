@@ -5,11 +5,13 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Royalty.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
+import "../utils/StringUtils.sol";
 
 contract PostNFT is Ownable, AccessControl, ERC721Royalty {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
     using Counters for Counters.Counter;
+    using StringUtils for address;
 
     Counters.Counter private _tokenIds;
     mapping(uint256 => PostStruct) private posts;
@@ -79,7 +81,7 @@ contract PostNFT is Ownable, AccessControl, ERC721Royalty {
         if (bytes(_tokenURI).length > 0) {
             return string(abi.encodePacked(base, _tokenURI));
         } else {
-            return string(abi.encodePacked(base, address(this), "/", tokenId));
+            return string(abi.encodePacked(base, "0x", address(this).toAsciiString(), "/", tokenId));
         }
     }
 

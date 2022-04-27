@@ -6,11 +6,14 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/common/ERC2981.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "../utils/StringUtils.sol";
 
 contract BookNFT is ERC1155, Ownable, ERC2981, AccessControl {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
     using SafeMath for uint256;
+    using StringUtils for address;
+
 
     mapping(uint256 => address) public creators;
     mapping(uint256 => uint256) public tokenSupply;
@@ -65,7 +68,7 @@ contract BookNFT is ERC1155, Ownable, ERC2981, AccessControl {
         if (customUriBytes.length > 0) {
             return customUri[_id];
         } else {
-            return string(abi.encodePacked(super.uri(_id),address(this),"/",_id));
+            return string(abi.encodePacked(super.uri(_id),"0x", address(this).toAsciiString(),"/",StringUtils.toString(_id)));
         }
     }
 

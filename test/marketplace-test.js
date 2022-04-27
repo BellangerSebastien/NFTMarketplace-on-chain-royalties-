@@ -8,8 +8,8 @@ describe("TheShare", () => {
     let book;
     let signer;
     let market;
-    let listingFee;
-    let listingFeeRecipient;
+    let marketFee;
+    let marketFeeRecipient;
     let floorPrice;
 
     const auctionPrice = ethers.utils.parseEther('0.1');
@@ -17,17 +17,20 @@ describe("TheShare", () => {
       signer = await ethers.getSigner(0);
       // To deploy PostNFT
       const postFactory = await ethers.getContractFactory("PostNFT");
-      post = await postFactory.deploy("TheSharePost", "TSPT", "https://theshare.io/", signer.address, 5);
+      post = await postFactory.deploy("TheSharePost", "TSPT", "https://theshare.io/", signer.address, 500);
       // await post.deployed();
       // To deploy Book NFT
       const bookFactory = await ethers.getContractFactory("BookNFT");
-      book = await bookFactory.deploy("TheShareBook", "TSBT", "https://theshare.io/", signer.address, 5);
+      book = await bookFactory.deploy("TheShareBook", "TSBT", "https://theshare.io/", signer.address, 500);
+      // To deploy TheShareToken
+      const tokenFactory = await ethers.getContractFactory("TheShareToken");
+      erc20token = await tokenFactory.deploy();
       // To deploy marketplace
       const marketFactory = await ethers.getContractFactory("TheShareMarketplace");
-      listingFeeRecipient = signer.address;
-      market = await marketFactory.deploy(listingFeeRecipient, ethers.utils.parseEther('0.025'), ethers.utils.parseEther('0.01'));
+      marketFeeRecipient = signer.address;
+      market = await marketFactory.deploy(marketFeeRecipient, 200, ethers.utils.parseEther('0.01'));
       // await market.deployed();
-      listingFee = await market.listingFee();
+      marketFee = await market.getMarketFee();
       floorPrice = await market.floorPrice();
     });
 
@@ -38,7 +41,12 @@ describe("TheShare", () => {
       // BookNFT
       expect(await book.name()).to.equal("TheShareBook");
       expect(await book.symbol()).to.equal("TSBT");
-      expect(listingFee).to.equal(ethers.utils.parseEther('0.025'));
+      // TheShareToken
+      expect(await erc20token.name()).to.equal("TheShareToken");
+      expect(await erc20token.symbol()).to.equal("TST");
+      expect(await erc20token.totalSupply()).to.equal(ethers.utils.parseEther("100000000000"));
+
+      expect(marketFee).to.equal(200);
       expect(floorPrice).to.equal(ethers.utils.parseEther('0.01'));
 
     });
@@ -47,13 +55,13 @@ describe("TheShare", () => {
       // post item
       expect(await post.mint(signer.address, "Maxim's first post")).to.be;
       await post.approve(market.address, 1);
-      expect(await market.createMarketItem(true, post.address, 1, auctionPrice, 1, ethers.constants.AddressZero, { value: listingFee })).to.be;
+      expect(await market.createMarketItem(true, post.address, 1, auctionPrice, 1, ethers.constants.AddressZero)).to.be;
       // book item
       const name = await book.name();
       const tokenId = 1;
       expect(await book.create(signer.address, tokenId, 1000000, "", 0x0)).to.be;
       await book.setApprovalForAll(market.address, true);
-      expect(await market.createMarketItem(false, book.address, tokenId, auctionPrice, 1000, ethers.constants.AddressZero, { value: listingFee })).to.be;
+      expect(await market.createMarketItem(false, book.address, tokenId, auctionPrice, 1000, ethers.constants.AddressZero)).to.be;
     });
 
     it("Should create market item with EVENT", async function () {
@@ -61,7 +69,7 @@ describe("TheShare", () => {
       await post.mint(signer.address, "Maxim's first post");
       await post.approve(market.address, 1);
       let itemId = ethers.utils.solidityKeccak256(['address', 'uint256', 'uint256', 'address'], [post.address, 1, 1, signer.address]);
-      await expect(market.createMarketItem(true, post.address, 1, auctionPrice, 1, ethers.constants.AddressZero, { value: listingFee }))
+      await expect(market.createMarketItem(true, post.address, 1, auctionPrice, 1, ethers.constants.AddressZero))
         .to.emit(market, 'MarketItemUpdated')
         .withArgs(
           itemId,
@@ -78,7 +86,7 @@ describe("TheShare", () => {
       await book.create(signer.address, tokenId, 1000000, "", 0x0);
       await book.setApprovalForAll(market.address, true);
       itemId = ethers.utils.solidityKeccak256(['address', 'uint256', 'uint256', 'address'], [book.address, 1, 1000, signer.address]);
-      expect(await market.createMarketItem(false, book.address, tokenId, auctionPrice, 1000, ethers.constants.AddressZero, { value: listingFee }))
+      expect(await market.createMarketItem(false, book.address, tokenId, auctionPrice, 1000, ethers.constants.AddressZero))
         .to.emit(market, 'MarketItemUpdated')
         .withArgs(
           itemId,
@@ -95,13 +103,13 @@ describe("TheShare", () => {
     it("Should revert to create market item if nft is not approved", async () => {
       // post item
       await post.mint(signer.address, "Maxim's first post");
-      await expect(market.createMarketItem(true, post.address, 1, auctionPrice, 1, ethers.constants.AddressZero, { value: listingFee }))
+      await expect(market.createMarketItem(true, post.address, 1, auctionPrice, 1, ethers.constants.AddressZero))
         .to.be.revertedWith('Marketplace: Token is not approved.');
       //book item
       const name = await book.name();
       const tokenId = 1;
       await book.create(signer.address, tokenId, 1000000, "", 0x0);
-      await expect(market.createMarketItem(false, book.address, tokenId, auctionPrice, 1000, ethers.constants.AddressZero, { value: listingFee }))
+      await expect(market.createMarketItem(false, book.address, tokenId, auctionPrice, 1000, ethers.constants.AddressZero))
         .to.be.revertedWith('Marketplace: Token is not approved.');
     });
 
@@ -110,20 +118,26 @@ describe("TheShare", () => {
       const [account0, account1, account2] = await ethers.getSigners();
       await post.mint(signer.address, "Maxim's first post");
       await post.approve(market.address, 1);
-      expect(await market.createMarketItem(true, post.address, 1, auctionPrice, 1, ethers.constants.AddressZero, { value: listingFee })).to.be;
+      // payment method: ETH
+      // expect(await market.createMarketItem(true, post.address, 1, auctionPrice, 1, ethers.constants.AddressZero)).to.be;
+      // payment method: erc20
+      expect(await market.createMarketItem(true, post.address, 1, auctionPrice, 1, erc20token.address)).to.be;
       await post.transferFrom(signer.address, account1.address, 1);
       let itemId = ethers.utils.solidityKeccak256(['address', 'uint256', 'uint256', 'address'], [post.address, 1, 1, signer.address]);
-      await expect(market.connect(account2).purchaseItem(itemId, 1, ethers.constants.AddressZero, { value: auctionPrice })).to.be.revertedWith("Token not approved nor owned");
+      let priceWithFee = auctionPrice.mul(marketFee.add(10000)).div(10000);
+      // await expect(market.connect(account2).purchaseItem(itemId, 1, ethers.constants.AddressZero, { value: priceWithFee })).to.be.revertedWith("Token not approved nor owned");
+      await expect(market.connect(account2).purchaseItem(itemId, 1, erc20token.address, { value: priceWithFee })).to.be.revertedWith("Token not approved nor owned");
 
       // book item
       const name = await book.name();
       const tokenId = 1;
       await book.create(signer.address, tokenId, 1000000, "", 0x0);
       await book.setApprovalForAll(market.address, true);
-      await market.createMarketItem(false, book.address, tokenId, auctionPrice, 1000, ethers.constants.AddressZero, { value: listingFee });
+      await market.createMarketItem(false, book.address, tokenId, auctionPrice, 1000, ethers.constants.AddressZero);
       await book.safeTransferFrom(signer.address, account1.address, tokenId, 1000000, 0x0);
       itemId = ethers.utils.solidityKeccak256(['address', 'uint256', 'uint256', 'address'], [book.address, tokenId, 1000, signer.address]);
-      await expect(market.connect(account2).purchaseItem(itemId, 1000, ethers.constants.AddressZero, { value: auctionPrice.mul(1000) }))
+      // await expect(market.connect(account2).purchaseItem(itemId, 1000, ethers.constants.AddressZero, { value: priceWithFee.mul(1000) }))
+      await expect(market.connect(account2).purchaseItem(itemId, 1000, erc20token.address, { value: priceWithFee.mul(1000) }))
         .to.be.revertedWith("Marketplace: ERC1155 insufficient balance of the token.");
     });
 
@@ -133,18 +147,18 @@ describe("TheShare", () => {
       // post item
       await post.mint(signer.address, "Maxim's first post");
       await post.approve(market.address, 1);
-      await market.createMarketItem(true, post.address, 1, auctionPrice, 1, ethers.constants.AddressZero, { value: listingFee });
+      await market.createMarketItem(true, post.address, 1, auctionPrice, 1, ethers.constants.AddressZero);
       const itemId = ethers.utils.solidityKeccak256(['address', 'uint256', 'uint256', 'address'], [post.address, 1, 1, signer.address]);
       await market.cancelMarketItem(itemId);
-
-      await expect(market.connect(account1).purchaseItem(itemId, 1, ethers.constants.AddressZero, { value: auctionPrice })).to.be.reverted;
+      
+      let priceWithFee = auctionPrice.mul(marketFee.add(10000)).div(10000);
+      await expect(market.connect(account1).purchaseItem(itemId, 1, ethers.constants.AddressZero, { value: priceWithFee })).to.be.reverted;
       // book item
       const name = await book.name();
       const tokenId = 11111;
 
-      await book.create(signer.address,tokenId,0,`${book.address}/${tokenId}`, 0x0);
+      await book.create(signer.address,tokenId,0,"", 0x0);
       expect(await book.mint(account1.address,tokenId,100,0x0)).to.be;
-      expect(await book.uri(tokenId)).to.equal(`https://theshare.io/${book.address}/${tokenId}`);
     });
 
     // it("Should revert to delete with wrong params", async () => {
