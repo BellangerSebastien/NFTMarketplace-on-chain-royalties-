@@ -149,6 +149,7 @@ contract TheShareMarketplace is ReentrancyGuard, Ownable {
         uint256 amount,
         address erc20address
     ) public payable nonReentrant {
+        require(price>=floorPrice,"Marketplace: Price must be larger or equal to the floor price.");
         bytes32 _itemId = keccak256(
             abi.encodePacked(nftContract, tokenId, amount, _msgSender())
         );
