@@ -13,7 +13,7 @@ describe("TheShare", () => {
     let floorPrice;
 
     const auctionPrice = ethers.utils.parseEther('0.1');
-    beforeEach(async () => {
+    before(async () => {
       signer = await ethers.getSigner(0);
       // To deploy PostNFT
       const postFactory = await ethers.getContractFactory("PostNFT");

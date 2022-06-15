@@ -116,7 +116,7 @@ contract TheShareMarketplace is ReentrancyGuard, Ownable {
         return marketItemsListed[itemId];
     }
 
-    function getMarketFee() public view returns(uint){
+    function getMarketFee() public view returns (uint256) {
         return _marketFee;
     }
 
@@ -149,11 +149,10 @@ contract TheShareMarketplace is ReentrancyGuard, Ownable {
         uint256 amount,
         address erc20address
     ) public payable nonReentrant {
-        bytes32 _itemId = keccak256(
-            abi.encodePacked(nftContract, tokenId, amount, _msgSender())
+        require(
+            price >= floorPrice,
+            "Marketplace: Price must be larger or equal to the floor price."
         );
-        // if (marketItemsListed[_itemId].itemId == _itemId)
-        //     revert("Marketplace: Item already exists for the current id");
 
         if (!isErc721) {
             require(amount > 0);
@@ -181,6 +180,13 @@ contract TheShareMarketplace is ReentrancyGuard, Ownable {
             );
         }
 
+        bytes32 _itemId = keccak256(
+            abi.encodePacked(nftContract, tokenId, amount, _msgSender())
+        );
+
+        // if (marketItemsListed[_itemId].itemId == _itemId)
+        //     revert("Marketplace: Item already exists for the current id");
+        
         marketItemsListed[_itemId] = MarketItem(
             _itemId,
             isErc721,
